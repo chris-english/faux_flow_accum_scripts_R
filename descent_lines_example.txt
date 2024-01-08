@@ -1,0 +1,133 @@
+# data:
+#  elev = structure(c(78, 74, 69, 64, 68, 74, 72, 67, 53, 58, 61, 53, 69, 
+# 56, 44, 55, 47, 34, 71, 49, 37, 22, 21, 12, 58, 46, 38, 31, 16, 
+# 11, 49, 50, 48, 24, 19, 12), dim = c(6L, 6L))
+# library(terra)
+# dem = rast(elev)
+
+
+
+# usage > descent_lns_tst1 = descent_lines2(dem = dem)
+descent_lines2 = function(dem) {
+ w <- matrix(c(1,1,NA,1,1,NA,NA,NA,NA), 3, 3)
+ w[is.na(w)] <- 0
+ a <- adjacent(dem, 1:ncell(dem), w)
+ # progressively remove unneeded objects
+ rm(w)
+adj_mtx_omit = na.omit(a)
+rm(a)
+adj_mtx3 = matrix(adj_mtx_omit, nrow = nrow(adj_mtx_omit), ncol = 4)
+rm(adj_mtx_omit)
+ adj_mtx_ord = matrix(NA, nrow = nrow(adj_mtx3), ncol = 4) 
+for(i in 1:nrow(adj_mtx3)) {
+ adj_mtx_ord[i, ] = rev(adj_mtx3[i, base::order(unname(unlist(dem[adj_mtx3[i, ]])))]) # voodoo? terra has order method
+ }
+ # all ordered cells [n, 1] > [n, 2] > [n, 3] > [n, 4] max -> min
+ # here make 1:4, 2:4, 3:4 matrices nrow 25 ncol 2
+ one_4_mtx = adj_mtx_ord[1:nrow(adj_mtx_ord), c(1,4)]
+ two_4_mtx = adj_mtx_ord[1:nrow(adj_mtx_ord), c(2,4)]
+ three_4_mtx = adj_mtx_ord[1:nrow(adj_mtx_ord), c(3,4)]
+ # order each by [, 1] and remove  prior duplicates
+ one_4_mtx_ord = one_4_mtx[order(one_4_mtx[,1]), ]
+ one_4_dup_prior = which(duplicated(one_4_mtx_ord[, 1]) == TRUE) -1
+ one_4_no_dup = one_4_mtx_ord[-one_4_dup_prior, ]
+ #
+ two_4_mtx_ord = two_4_mtx[order(two_4_mtx[, 1]), ]
+ two_4_dup_prior = which(duplicated(two_4_mtx_ord[, 1]) == TRUE) -1
+ two_4_no_dup = two_4_mtx_ord[-two_4_dup_prior, ]
+ #
+ three_4_mtx_ord = three_4_mtx[order(three_4_mtx[, 1]), ]
+ three_4_dup_prior = which(duplicated(three_4_mtx_ord[, 1]) == TRUE) -1
+ three_4_no_dup = three_4_mtx_ord[-three_4_dup_prior, ]
+# 
+ ord_mtx123_lst = list(one_4_no_dup, two_4_no_dup, three_4_no_dup)
+lines_mtx_432 = do.call(rbind, ord_mtx123_lst)
+# 
+rm(adj_mtx_ord)
+rm(adj_mtx3)
+rm(i)
+#
+rm(one_4_mtx)
+rm(two_4_mtx)
+rm(three_4_mtx)
+#
+rm(one_4_mtx_ord)
+rm(one_4_dup_prior)
+rm(one_4_no_dup)
+#
+rm(two_4_mtx_ord)
+rm(two_4_dup_prior)
+rm(two_4_no_dup)
+#
+rm(three_4_mtx_ord)
+rm(three_4_dup_prior)
+rm(three_4_no_dup)
+#
+rm(ord_mtx123_lst)
+# order #
+lines_mtx432 = lines_mtx_432[order(lines_mtx_432[, 1]), ]
+# [,1]==[,2] remove
+lines_mtx432 = lines_mtx432[-which(duplicated(lines_mtx432[, ])  == TRUE), ] 
+lines_mtx_432_2 = lines_mtx432
+# towards the steepest connected descent vect continue simplifying lines_mtx432_2
+# after a long, fruitless foray (given my skills) in base, dplyr
+suppressPackageStartupMessages(library(dplyr))
+val = unname(dem[lines_mtx432[, 2]]) # val is df
+lines_elev_mtx = cbind(lines_mtx432,val) # promotes mtx to df
+colnames(lines_elev_mtx) = c('A', 'B', 'val') # hence colnames not dimnames
+
+lines_elev_df = as.data.frame(lines_elev_mtx) %>%
+ group_by(A) %>%
+ arrange(desc(B), .by_group = TRUE) %>%
+ slice(which.min(val))
+lines_elev_mtx = as.matrix(lines_elev_df)
+
+# this is final descent by steepest path  to make geom_mtx for vect from
+# now 17 -> 22
+rm(lines_elev_df)
+# unlist(asplit(lines_elev_mtx,1))
+# make geom_mtx for descent_lines
+
+lines_elev_mtx2 = lines_elev_mtx[, 1:2]
+lines_elev_asplit = unlist(asplit(lines_elev_mtx2, 1))
+lines_elev_xy = xyFromCell(dem, lines_elev_asplit) 
+geom_descent = matrix(c(rep(1:nrow(lines_elev_mtx), each = 2), rep(1, nrow(lines_elev_mtx) * 2), lines_elev_xy[, 1], lines_elev_xy[, 2], rep(0, nrow(lines_elev_mtx) * 2)), nrow = nrow(lines_elev_xy), ncol = 5) 
+geom_descent_vect = vect(geom_descent, 'lines')
+rm(lines_mtx_432)
+rm(lines_mtx_432_2)
+rm(lines_mtx432)
+rm(dem)
+rm(lines_elev_mtx)
+rm(lines_elev_asplit)
+rm(lines_elev_xy)
+rm(val)
+# return geom_descent & geom_descent_vect - you might want pnts at some point
+# return lines_elev_mtx, lines_mtx432
+# NOW, on to rewriting dem2 to reflect accumulation
+
+list_with_names = mget(ls()) # this dumps everything processed above - kitchen sink return as named list
+return(list_with_names)
+}
+# and continuing, now at command line
+
+library(terra)
+elev = structure(c(78, 74, 69, 64, 68, 74, 72, 67, 53, 58, 61, 53, 69, 
+56, 44, 55, 47, 34, 71, 49, 37, 22, 21, 12, 58, 46, 38, 31, 16, 
+11, 49, 50, 48, 24, 19, 12), dim = c(6L, 6L))
+dem = rast(elev)
+descent_tst = descent_lines2(dem = dem)
+names(descent_lines_tst)
+[1] "geom_descent"      "geom_descent_vect" "lines_elev_mtx2" 
+
+descent_vect = descent_tst$geom_descent_vect
+descent_elev_mtx2 = descent_tst$lines_elev_mtx2
+lines_lut = sort(matrix(c(desecent_elev_mtx2[, 1], descent_elev_mtx2[, 2]), ncol = 1))
+dem2 = rast(dem)
+ranks = max(rle(lines_lut)$values[rle(lines_lut)$lengths])
+for (i in 1:ranks) {
+  if (length(dem2[rle(lines_lut)$values[which(rle(lines_lut)$lengths == i)]]))
+  {dem2[rle(lines_lut)$values[which(rle(lines_lut)$lengths == i)]] = i }
+  }
+plot(dem2)
+plot(descent_vect, add = TRUE)
+# works for above elev, terra::elev, volcano, but does not scale
